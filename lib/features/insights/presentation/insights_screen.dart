@@ -12,7 +12,10 @@ class InsightsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final subscriptionsAsync = ref.watch(subscriptionsProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final currencySymbol = ref.watch(currencyProvider.notifier).symbol;
+    // Watch state directly so widget rebuilds when currency changes
+    ref.watch(currencyProvider);
+    final currencyNotifier = ref.read(currencyProvider.notifier);
+    final currencySymbol = currencyNotifier.symbol;
 
     return RefreshIndicator(
       onRefresh: () async => ref.invalidate(subscriptionsProvider),
@@ -32,7 +35,7 @@ class InsightsScreen extends ConsumerWidget {
                       style: TextStyle(
                           fontSize: 28, 
                           fontWeight: FontWeight.bold,
-                          color: isDark ? Colors.white : AppTheme.textLight)),
+                          color: isDark ? Colors.white : AppTheme.headingLight)),
                   const SizedBox(height: 4),
                   const Text('Optimize your spending habits',
                       style: TextStyle(color: AppTheme.textMutedDark, fontSize: 14)),
@@ -41,7 +44,8 @@ class InsightsScreen extends ConsumerWidget {
             ),
           ),
           subscriptionsAsync.when(
-            data: (List<Subscription> subs) {
+            data: (List<Subscription> rawSubs) {
+              final subs = rawSubs.map((s) => s.copyWith(price: currencyNotifier.convertToDisplay(s.price))).toList();
               if (subs.isEmpty) {
                 return const SliverFillRemaining(
                   child: Center(child: Text('Add subscriptions to see insights', style: TextStyle(color: AppTheme.textMutedDark))),
@@ -80,7 +84,7 @@ class InsightsScreen extends ConsumerWidget {
                 ]),
               );
             },
-            loading: () => const SliverFillRemaining(child: Center(child: CircularProgressIndicator())),
+            loading: () => SliverFillRemaining(child: Center(child: CircularProgressIndicator(color: isDark ? AppTheme.primaryAccent : AppTheme.primaryLight))),
             error: (err, __) => SliverFillRemaining(child: Center(child: Text('Error: $err'))),
           ),
           const SliverToBoxAdapter(child: SizedBox(height: 120)),
@@ -126,7 +130,7 @@ class InsightsScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 12),
           Text('$symbol${(monthly * 12).toStringAsFixed(2)}', 
-            style: TextStyle(fontSize: 36, fontWeight: FontWeight.bold, color: isDark ? Colors.white : AppTheme.textLight, letterSpacing: -1)),
+            style: TextStyle(fontSize: 36, fontWeight: FontWeight.bold, color: isDark ? Colors.white : AppTheme.headingLight, letterSpacing: -1)),
           const SizedBox(height: 20),
           const Divider(height: 1, color: AppTheme.textMutedDark),
           const SizedBox(height: 20),
@@ -181,7 +185,7 @@ class InsightsScreen extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : AppTheme.textLight)),
+                Text(title, style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : AppTheme.headingLight)),
                 Text(desc, style: const TextStyle(color: AppTheme.textMutedDark, fontSize: 12)),
               ],
             ),

@@ -70,7 +70,7 @@ class _AddSubscriptionScreenState
       final sub = Subscription(
         userId: Supabase.instance.client.auth.currentUser!.id,
         name: _nameCtrl.text.trim(),
-        price: double.parse(_priceCtrl.text.trim()),
+        price: ref.read(currencyProvider.notifier).convertToBase(double.parse(_priceCtrl.text.trim())),
         billingCycle: _selectedCycle,
         nextBillingDate: _nextBillingDate,
         category: _selectedCategory,
@@ -141,7 +141,7 @@ class _AddSubscriptionScreenState
                       style: TextStyle(
                         fontSize: 24, 
                         fontWeight: FontWeight.bold,
-                        color: isDark ? Colors.white : AppTheme.textLight,
+                        color: isDark ? Colors.white : AppTheme.headingLight,
                         letterSpacing: -0.5,
                       ),
                     ),
@@ -268,7 +268,7 @@ class _AddSubscriptionScreenState
               TextFormField(
                 controller: _nameCtrl,
                 style: TextStyle(
-                    color: isDark ? Colors.white : AppTheme.textLight),
+                    color: isDark ? Colors.white : AppTheme.headingLight),
                 decoration: const InputDecoration(
                   hintText: 'e.g. Netflix, Spotify...',
                   prefixIcon: Icon(Icons.label_outline,
@@ -285,7 +285,7 @@ class _AddSubscriptionScreenState
                 keyboardType:
                     const TextInputType.numberWithOptions(decimal: true),
                 style: TextStyle(
-                    color: isDark ? Colors.white : AppTheme.textLight),
+                    color: isDark ? Colors.white : AppTheme.headingLight),
                 decoration: InputDecoration(
                   hintText: '0.00',
                   prefixIcon: Padding(
@@ -336,7 +336,7 @@ class _AddSubscriptionScreenState
                       Text(
                         DateFormat('MMMM dd, yyyy').format(_nextBillingDate),
                         style: TextStyle(
-                          color: isDark ? Colors.white : AppTheme.textLight,
+                          color: isDark ? Colors.white : AppTheme.headingLight,
                           fontSize: 16,
                         ),
                       ),
@@ -354,7 +354,7 @@ class _AddSubscriptionScreenState
                 controller: _notesCtrl,
                 maxLines: 3,
                 style: TextStyle(
-                    color: isDark ? Colors.white : AppTheme.textLight),
+                    color: isDark ? Colors.white : AppTheme.headingLight),
                 decoration: const InputDecoration(
                   hintText: 'Anything to remember...',
                   prefixIcon: Padding(
@@ -525,7 +525,7 @@ class _AddSubscriptionScreenState
                         ? Colors.white
                         : (isDark
                             ? AppTheme.textMutedDark
-                            : AppTheme.textLight),
+                            : AppTheme.headingLight),
                     fontWeight: FontWeight.w600,
                     fontSize: 13,
                   ),
@@ -652,7 +652,7 @@ class _ServiceGridItem extends StatelessWidget {
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w800,
-                color: isDark ? Colors.white.withOpacity(0.9) : AppTheme.textLight,
+                color: isDark ? Colors.white.withOpacity(0.9) : AppTheme.headingLight,
                 letterSpacing: -0.2,
               ),
               maxLines: 1,

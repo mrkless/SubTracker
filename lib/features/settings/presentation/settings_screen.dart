@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import '../../../core/theme.dart';
 import '../../../main.dart';
 import '../../../core/currency_provider.dart';
@@ -15,35 +17,68 @@ class SettingsScreen extends ConsumerStatefulWidget {
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _isChangingPassword = false;
+  bool _notificationsEnabled = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _notificationsEnabled =
+        Hive.box('settings').get('notifications_enabled', defaultValue: true);
+  }
+
+  Future<void> _launchUrl(String url) async {
+    final Uri uri = Uri.parse(url);
+    try {
+      // Force external application for better reliability
+      final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!launched && mounted) {
+        throw 'Launch failed';
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Could not open link: $url'),
+            backgroundColor: AppTheme.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final isDarkMode = ref.watch(themeModeProvider);
+    ref.watch(currencyProvider);
     final theme = Theme.of(context);
     final user = Supabase.instance.client.auth.currentUser;
+    final currencyCode = ref.read(currencyProvider);
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
       body: CustomScrollView(
         slivers: [
+          // ── App Bar ──────────────────────────────────────────
           SliverAppBar(
-            expandedHeight: 120.0,
+            expandedHeight: 100.0,
             floating: false,
             pinned: true,
             backgroundColor: theme.scaffoldBackgroundColor,
             elevation: 0,
             scrolledUnderElevation: 0,
             leading: IconButton(
-              icon: Icon(Icons.arrow_back_ios_new, 
-                    color: isDarkMode ? Colors.white : AppTheme.textLight),
+              icon: Icon(Icons.arrow_back_ios_new_rounded,
+                  color: isDarkMode ? Colors.white : AppTheme.headingLight,
+                  size: 20),
               onPressed: () => context.pop(),
             ),
             flexibleSpace: FlexibleSpaceBar(
               title: Text('Settings',
                   style: TextStyle(
-                      color: isDarkMode ? Colors.white : AppTheme.textLight, 
-                      fontWeight: FontWeight.bold, 
-                      fontSize: 18)),
+                      color: isDarkMode ? Colors.white : AppTheme.headingLight,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 20)),
               centerTitle: false,
               titlePadding: const EdgeInsets.only(left: 54, bottom: 16),
               background: Container(
@@ -51,125 +86,307 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   gradient: LinearGradient(
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
-                    colors: isDarkMode 
-                      ? [const Color(0xFF1A0E2E), theme.scaffoldBackgroundColor]
-                      : [const Color(0xFFF3F4F6), theme.scaffoldBackgroundColor],
+                    colors: isDarkMode
+                        ? [const Color(0xFF1A0E2E), theme.scaffoldBackgroundColor]
+                        : [const Color(0xFFE0E7FF), theme.scaffoldBackgroundColor], // Indigo-tinted bg for light mode
                   ),
                 ),
               ),
             ),
           ),
+
           SliverList(
             delegate: SliverChildListDelegate([
-              const SizedBox(height: 16),
-              
-              // Profile Section
-              _buildSectionHeader('Account', isDarkMode),
-              _buildSettingItem(
-                context,
-                icon: Icons.person_outline_rounded,
-                title: 'Email',
-                subtitle: user?.email ?? 'Not signed in',
+              const SizedBox(height: 8),
+
+              // ── Profile Card ──────────────────────────────────
+              _ProfileCard(user: user, isDarkMode: isDarkMode),
+
+              const SizedBox(height: 28),
+
+              // ── Appearance ───────────────────────────────────
+              _SectionLabel(label: 'Appearance', isDarkMode: isDarkMode),
+              _SettingsCard(
                 isDarkMode: isDarkMode,
-                onTap: () {},
-              ),
-              _buildSettingItem(
-                context,
-                icon: Icons.key_outlined,
-                title: 'Change Password',
-                subtitle: 'Update your security',
-                isDarkMode: isDarkMode,
-                trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: AppTheme.textMutedDark),
-                onTap: () => _showChangePasswordDialog(context),
+                children: [
+                  _SettingRow(
+                    icon: isDarkMode
+                        ? Icons.dark_mode_rounded
+                        : Icons.light_mode_rounded,
+                    iconColor: const Color(0xFF7B61FF),
+                    title: 'Theme',
+                    subtitle: isDarkMode ? 'Dark Mode' : 'Light Mode',
+                    isDarkMode: isDarkMode,
+                    trailing: Switch.adaptive(
+                      value: isDarkMode,
+                      activeColor: isDarkMode ? AppTheme.secondaryAccent : AppTheme.primaryLight,
+                      inactiveTrackColor: isDarkMode
+                          ? AppTheme.surfaceDarkLighter
+                          : Colors.grey.shade300,
+                      onChanged: (_) =>
+                          ref.read(themeModeProvider.notifier).toggle(),
+                    ),
+                    onTap: () => ref.read(themeModeProvider.notifier).toggle(),
+                  ),
+                ],
               ),
 
-              const SizedBox(height: 24),
-              _buildSectionHeader('App Settings', isDarkMode),
-              
-              // Theme Toggle
-              _buildSettingItem(
-                context,
-                icon: isDarkMode ? Icons.dark_mode_rounded : Icons.light_mode_rounded,
-                title: 'Appearance',
-                subtitle: isDarkMode ? 'Dark Mode' : 'Light Mode',
+              const SizedBox(height: 20),
+
+              // ── Preferences ──────────────────────────────────
+              _SectionLabel(label: 'Preferences', isDarkMode: isDarkMode),
+              _SettingsCard(
                 isDarkMode: isDarkMode,
-                trailing: Switch.adaptive(
-                  value: isDarkMode,
-                  activeColor: AppTheme.secondaryAccent,
-                  inactiveTrackColor: isDarkMode ? AppTheme.surfaceDarkLighter : Colors.grey.shade300,
-                  onChanged: (val) {
-                    ref.read(themeModeProvider.notifier).toggle();
-                  },
-                ),
-                onTap: () => ref.read(themeModeProvider.notifier).toggle(),
+                children: [
+                  _SettingRow(
+                    icon: Icons.currency_exchange_rounded,
+                    iconColor: const Color(0xFF4ECDC4),
+                    title: 'Currency',
+                    subtitle: currencyCode == 'USD'
+                        ? 'US Dollar (\$)'
+                        : 'Philippine Peso (₱)',
+                    isDarkMode: isDarkMode,
+                    trailing: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: (isDarkMode ? AppTheme.primaryAccent : AppTheme.primaryLight).withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(currencyCode,
+                          style: TextStyle(
+                              color: isDarkMode ? AppTheme.primaryAccent : AppTheme.primaryLight,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13)),
+                    ),
+                    onTap: () => _showCurrencyDialog(),
+                  ),
+                  _Divider(isDarkMode: isDarkMode),
+                  _SettingRow(
+                    icon: Icons.notifications_active_outlined,
+                    iconColor: const Color(0xFFFF8B94),
+                    title: 'Notifications',
+                    subtitle: _notificationsEnabled
+                        ? 'Subscription alerts enabled'
+                        : 'Notifications off',
+                    isDarkMode: isDarkMode,
+                    trailing: Switch.adaptive(
+                      value: _notificationsEnabled,
+                      activeColor: isDarkMode ? AppTheme.secondaryAccent : AppTheme.primaryLight,
+                      inactiveTrackColor: isDarkMode
+                          ? AppTheme.surfaceDarkLighter
+                          : Colors.grey.shade300,
+                      onChanged: (val) {
+                        setState(() => _notificationsEnabled = val);
+                        Hive.box('settings')
+                            .put('notifications_enabled', val);
+                      },
+                    ),
+                    onTap: () {},
+                  ),
+                ],
               ),
 
-              _buildSettingItem(
-                context,
-                icon: Icons.currency_exchange_rounded,
-                title: 'Currency',
-                subtitle: ref.watch(currencyProvider) == 'USD' ? 'US Dollar (\$)' : 'Philippine Peso (₱)',
+              const SizedBox(height: 20),
+
+              // ── Account ──────────────────────────────────────
+              _SectionLabel(label: 'Account', isDarkMode: isDarkMode),
+              _SettingsCard(
                 isDarkMode: isDarkMode,
-                trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: AppTheme.textMutedDark),
-                onTap: () => _showCurrencyDialog(context),
+                children: [
+                  _SettingRow(
+                    icon: Icons.key_outlined,
+                    iconColor: const Color(0xFFFFBF47),
+                    title: 'Change Password',
+                    subtitle: 'Update your security credentials',
+                    isDarkMode: isDarkMode,
+                    trailing: Icon(Icons.arrow_forward_ios_rounded,
+                        size: 14, color: AppTheme.textMutedDark),
+                    onTap: () => _showChangePasswordDialog(),
+                  ),
+                ],
               ),
 
-              _buildSettingItem(
-                context,
-                icon: Icons.notifications_none_rounded,
-                title: 'Notifications',
-                subtitle: 'Manage app alerts',
-                isDarkMode: isDarkMode,
-                trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: AppTheme.textMutedDark),
-                onTap: () {},
-              ),
+              const SizedBox(height: 20),
 
-              const SizedBox(height: 24),
-              _buildSectionHeader('Support', isDarkMode),
-              _buildSettingItem(
-                context,
-                icon: Icons.help_outline_rounded,
-                title: 'Help Center',
+              // ── Developer & Info ─────────────────────────────
+              _SectionLabel(label: 'Developer & Info', isDarkMode: isDarkMode),
+              _SettingsCard(
                 isDarkMode: isDarkMode,
-                trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: AppTheme.textMutedDark),
-                onTap: () {},
-              ),
-              _buildSettingItem(
-                context,
-                icon: Icons.info_outline_rounded,
-                title: 'About',
-                subtitle: 'Version 1.0.0',
-                isDarkMode: isDarkMode,
-                onTap: () {},
-              ),
-
-              const SizedBox(height: 48),
-              
-              // Logout Button
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: TextButton(
-                  onPressed: () => _showLogoutDialog(context),
-                  style: TextButton.styleFrom(
-                    foregroundColor: AppTheme.error,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    backgroundColor: AppTheme.error.withOpacity(isDarkMode ? 0.05 : 0.08),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                      side: BorderSide(color: AppTheme.error.withOpacity(0.3)),
+                children: [
+                  // Developer profile row
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 14),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: isDarkMode 
+                                ? [AppTheme.primaryAccent, AppTheme.secondaryAccent]
+                                : [AppTheme.primaryLight, AppTheme.skyBlue],
+                            ),
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: const Center(
+                            child: Text('LB',
+                                style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16)),
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Lester Bucag',
+                                  style: TextStyle(
+                                      color: isDarkMode
+                                          ? Colors.white
+                                          : AppTheme.headingLight,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 15)),
+                              const Text('Developer',
+                                  style: TextStyle(
+                                      color: AppTheme.textMutedDark,
+                                      fontSize: 12)),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  child: const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.logout_rounded, size: 20),
-                      SizedBox(width: 8),
-                      Text('Log Out', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                    ],
+                  _Divider(isDarkMode: isDarkMode),
+                  // Email
+                  _SettingRow(
+                    icon: Icons.mail_outline_rounded,
+                    iconColor: const Color(0xFF4AC3FF),
+                    title: 'Contact',
+                    subtitle: 'mrklessbucag@gmail.com',
+                    isDarkMode: isDarkMode,
+                    trailing: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF4AC3FF).withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Text('Email',
+                          style: TextStyle(
+                              color: Color(0xFF4AC3FF),
+                              fontWeight: FontWeight.w600,
+                              fontSize: 12)),
+                    ),
+                    onTap: () =>
+                        _launchUrl('mailto:mrklessbucag@gmail.com'),
+                  ),
+                  _Divider(isDarkMode: isDarkMode),
+                  // Portfolio
+                  _SettingRow(
+                    icon: Icons.public_rounded,
+                    iconColor: const Color(0xFF81C784),
+                    title: 'Portfolio',
+                    subtitle: 'mrkless-portfolio.vercel.app',
+                    isDarkMode: isDarkMode,
+                    trailing: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF81C784).withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Text('Visit',
+                          style: TextStyle(
+                              color: Color(0xFF81C784),
+                              fontWeight: FontWeight.w600,
+                              fontSize: 12)),
+                    ),
+                    onTap: () => _launchUrl(
+                        'https://mrkless-portfolio.vercel.app'),
+                  ),
+                  _Divider(isDarkMode: isDarkMode),
+                  // About / Disclaimer
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFFBF47).withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(Icons.info_outline_rounded,
+                              color: Color(0xFFFFBF47), size: 20),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('SubTracker v1.0.0',
+                                  style: TextStyle(
+                                      color: isDarkMode
+                                          ? Colors.white
+                                          : AppTheme.headingLight,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14)),
+                              const SizedBox(height: 4),
+                              const Text(
+                                'This app is intended for testing and personal use only. '
+                                'It is not an official commercial product.',
+                                style: TextStyle(
+                                    color: AppTheme.textMutedDark,
+                                    fontSize: 12,
+                                    height: 1.5),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 32),
+
+              // ── Logout Button ────────────────────────────────
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: GestureDetector(
+                  onTap: () => _showLogoutDialog(),
+                  child: Container(
+                    height: 54,
+                    decoration: BoxDecoration(
+                      color: AppTheme.error.withOpacity(isDarkMode ? 0.08 : 0.1),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                          color: AppTheme.error.withOpacity(0.3), width: 1),
+                    ),
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.logout_rounded,
+                            color: AppTheme.error, size: 20),
+                        SizedBox(width: 10),
+                        Text('Log Out',
+                            style: TextStyle(
+                                color: AppTheme.error,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16)),
+                      ],
+                    ),
                   ),
                 ),
               ),
-              const SizedBox(height: 40),
+              const SizedBox(height: 48),
             ]),
           ),
         ],
@@ -177,143 +394,140 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
-  Widget _buildSectionHeader(String title, bool isDarkMode) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 8, 24, 12),
-      child: Text(
-        title.toUpperCase(),
-        style: TextStyle(
-          color: isDarkMode ? AppTheme.secondaryAccent : AppTheme.primaryAccent,
-          fontSize: 12,
-          fontWeight: FontWeight.w800,
-          letterSpacing: 1.2,
-        ),
-      ),
-    );
-  }
+  // ──────────────────────────────────────────────────────────────
+  // DIALOGS
+  // ──────────────────────────────────────────────────────────────
 
-  Widget _buildSettingItem(
-    BuildContext context, {
-    required IconData icon,
-    required String title,
-    String? subtitle,
-    Widget? trailing,
-    required bool isDarkMode,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-        child: Row(
+  void _showCurrencyDialog() {
+    final isDarkMode = ref.read(themeModeProvider);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: isDarkMode ? AppTheme.surfaceDark : Colors.white,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: Text('Select Currency',
+            style: TextStyle(
+                color: isDarkMode ? Colors.white : AppTheme.headingLight,
+                fontWeight: FontWeight.bold)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: isDarkMode ? AppTheme.surfaceDark : Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: isDarkMode ? [] : [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  )
-                ],
-              ),
-              child: Icon(icon, color: isDarkMode ? Colors.white : AppTheme.primaryAccent, size: 22),
+            _CurrencyOption(
+              code: 'USD',
+              name: 'US Dollar',
+              symbol: '\$',
+              isSelected: ref.read(currencyProvider) == 'USD',
+              isDarkMode: isDarkMode,
+              onTap: () {
+                ref.read(currencyProvider.notifier).setCurrency('USD');
+                Navigator.pop(ctx);
+              },
             ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title, style: TextStyle(
-                    color: isDarkMode ? Colors.white : AppTheme.textLight, 
-                    fontSize: 16, 
-                    fontWeight: FontWeight.w600
-                  )),
-                  if (subtitle != null)
-                    Text(subtitle, style: const TextStyle(color: AppTheme.textMutedDark, fontSize: 13)),
-                ],
-              ),
+            const SizedBox(height: 8),
+            _CurrencyOption(
+              code: 'PHP',
+              name: 'Philippine Peso',
+              symbol: '₱',
+              isSelected: ref.read(currencyProvider) == 'PHP',
+              isDarkMode: isDarkMode,
+              onTap: () {
+                ref.read(currencyProvider.notifier).setCurrency('PHP');
+                Navigator.pop(ctx);
+              },
             ),
-            if (trailing != null) trailing,
           ],
         ),
       ),
     );
   }
 
-  void _showChangePasswordDialog(BuildContext context) {
-    final passwordController = TextEditingController();
+  void _showChangePasswordDialog() {
+    final isDarkMode = ref.read(themeModeProvider);
+    final ctrl = TextEditingController();
     showDialog(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          backgroundColor: ref.read(themeModeProvider) ? AppTheme.surfaceDark : Colors.white,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          backgroundColor: isDarkMode ? AppTheme.surfaceDark : Colors.white,
           surfaceTintColor: Colors.transparent,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-          title: Text('Change Password', 
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          title: Text('Change Password',
               style: TextStyle(
-                  color: ref.read(themeModeProvider) ? Colors.white : AppTheme.textLight,
+                  color: isDarkMode ? Colors.white : AppTheme.headingLight,
                   fontWeight: FontWeight.bold)),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text('Enter your new password below.', 
+              const Text('Enter your new password below.',
                   style: TextStyle(color: AppTheme.textMutedDark)),
               const SizedBox(height: 16),
               TextField(
-                controller: passwordController,
+                controller: ctrl,
                 obscureText: true,
-                style: TextStyle(color: ref.read(themeModeProvider) ? Colors.white : AppTheme.textLight),
+                style: TextStyle(
+                    color: isDarkMode ? Colors.white : AppTheme.headingLight),
                 decoration: InputDecoration(
-                  hintText: 'New Password',
+                  hintText: 'New Password (min 6 chars)',
+                  hintStyle:
+                      const TextStyle(color: AppTheme.textMutedDark),
                   filled: true,
-                  fillColor: ref.read(themeModeProvider) ? Colors.black26 : Colors.grey.shade100,
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                  fillColor:
+                      isDarkMode ? Colors.black26 : Colors.grey.shade100,
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none),
                 ),
               ),
             ],
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel', style: TextStyle(color: AppTheme.textMutedDark)),
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel',
+                  style: TextStyle(color: AppTheme.textMutedDark)),
             ),
             ElevatedButton(
-              onPressed: _isChangingPassword ? null : () async {
-                final newPass = passwordController.text.trim();
-                if (newPass.length < 6) return;
-                
-                setDialogState(() => _isChangingPassword = true);
-                try {
-                  await Supabase.instance.client.auth.updateUser(
-                    UserAttributes(password: newPass),
-                  );
-                  if (context.mounted) {
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Password updated successfully')),
-                    );
-                  }
-                } catch (e) {
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Error: $e')),
-                    );
-                  }
-                } finally {
-                  setDialogState(() => _isChangingPassword = false);
-                }
-              },
+              onPressed: _isChangingPassword
+                  ? null
+                  : () async {
+                      final newPass = ctrl.text.trim();
+                      if (newPass.length < 6) return;
+                      setDialogState(() => _isChangingPassword = true);
+                      try {
+                        await Supabase.instance.client.auth
+                            .updateUser(UserAttributes(password: newPass));
+                        if (ctx.mounted) {
+                          Navigator.pop(ctx);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                                content:
+                                    Text('Password updated successfully')),
+                          );
+                        }
+                      } catch (e) {
+                        if (ctx.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Error: $e')),
+                          );
+                        }
+                      } finally {
+                        setDialogState(() => _isChangingPassword = false);
+                      }
+                    },
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.primaryAccent,
+                backgroundColor: isDarkMode ? AppTheme.primaryAccent : AppTheme.primaryLight,
                 foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
               ),
-              child: _isChangingPassword 
-                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+              child: _isChangingPassword
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white))
                   : const Text('Update'),
             ),
           ],
@@ -322,80 +536,358 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
-  void _showCurrencyDialog(BuildContext context) {
+  void _showLogoutDialog() {
+    final isDarkMode = ref.read(themeModeProvider);
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: ref.read(themeModeProvider) ? AppTheme.surfaceDark : Colors.white,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: isDarkMode ? AppTheme.surfaceDark : Colors.white,
         surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        title: Text('Select Currency', 
+        title: Text('Log Out',
             style: TextStyle(
-                color: ref.read(themeModeProvider) ? Colors.white : AppTheme.textLight, 
+                color: isDarkMode ? Colors.white : AppTheme.headingLight,
                 fontWeight: FontWeight.bold)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
+        content: const Text('Are you sure you want to log out?',
+            style: TextStyle(color: AppTheme.textMutedDark)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel',
+                style: TextStyle(color: AppTheme.textMutedDark)),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await Supabase.instance.client.auth.signOut();
+              if (context.mounted) context.go('/login');
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.error,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
+            ),
+            child: const Text('Log Out'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────
+// REUSABLE COMPONENTS
+// ──────────────────────────────────────────────────────────────────
+
+class _ProfileCard extends StatelessWidget {
+  final dynamic user;
+  final bool isDarkMode;
+  const _ProfileCard({required this.user, required this.isDarkMode});
+
+  @override
+  Widget build(BuildContext context) {
+    final email = user?.email ?? 'Not signed in';
+    final firstName =
+        user?.userMetadata?['first_name'] as String? ?? '';
+    final lastName =
+        user?.userMetadata?['last_name'] as String? ?? '';
+    final displayName =
+        (firstName.isNotEmpty || lastName.isNotEmpty)
+            ? '$firstName $lastName'.trim()
+            : email.split('@').first;
+    final initials = firstName.isNotEmpty
+        ? '${firstName[0]}${lastName.isNotEmpty ? lastName[0] : ''}'
+            .toUpperCase()
+        : email[0].toUpperCase();
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: isDarkMode 
+              ? [AppTheme.primaryAccent.withOpacity(0.25), AppTheme.secondaryAccent.withOpacity(0.1)]
+              : [AppTheme.primaryLight.withOpacity(0.15), AppTheme.skyBlue.withOpacity(0.08)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+              color: AppTheme.primaryAccent
+                  .withOpacity(isDarkMode ? 0.3 : 0.15)),
+        ),
+        child: Row(
           children: [
-            _buildCurrencyOption(context, 'USD', 'US Dollar (\$)', ref.read(currencyProvider) == 'USD'),
-            const SizedBox(height: 8),
-            _buildCurrencyOption(context, 'PHP', 'Philippine Peso (₱)', ref.read(currencyProvider) == 'PHP'),
+            Container(
+              width: 56,
+              height: 56,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: isDarkMode 
+                    ? [AppTheme.primaryAccent, AppTheme.secondaryAccent]
+                    : [AppTheme.primaryLight, AppTheme.skyBlue],
+                ),
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: Center(
+                child: Text(initials,
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 20)),
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(displayName,
+                      style: TextStyle(
+                          color: isDarkMode ? Colors.white : AppTheme.headingLight,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 17)),
+                  const SizedBox(height: 3),
+                  Text(email,
+                      style: const TextStyle(
+                          color: AppTheme.textMutedDark, fontSize: 13)),
+                ],
+              ),
+            ),
           ],
         ),
       ),
     );
   }
+}
 
-  Widget _buildCurrencyOption(BuildContext context, String code, String name, bool isSelected) {
-    final isDarkMode = ref.read(themeModeProvider);
-    return ListTile(
-      onTap: () {
-        ref.read(currencyProvider.notifier).setCurrency(code);
-        Navigator.pop(context);
-      },
-      leading: Icon(
-        isSelected ? Icons.radio_button_checked : Icons.radio_button_off,
-        color: isSelected ? AppTheme.secondaryAccent : AppTheme.textMutedDark,
+class _SectionLabel extends StatelessWidget {
+  final String label;
+  final bool isDarkMode;
+  const _SectionLabel({required this.label, required this.isDarkMode});
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.fromLTRB(24, 0, 24, 10),
+        child: Text(
+          label.toUpperCase(),
+          style: TextStyle(
+            color: isDarkMode
+                ? AppTheme.secondaryAccent
+                : AppTheme.primaryLight,
+            fontSize: 11,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 1.4,
+          ),
+        ),
+      );
+}
+
+class _SettingsCard extends StatelessWidget {
+  final List<Widget> children;
+  final bool isDarkMode;
+  const _SettingsCard(
+      {required this.children, required this.isDarkMode});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Container(
+        decoration: BoxDecoration(
+          color: isDarkMode ? AppTheme.surfaceDark : Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+              color: isDarkMode
+                  ? AppTheme.surfaceDarkLighter
+                  : AppTheme.borderLight),
+          boxShadow: isDarkMode
+              ? []
+              : [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.04),
+                    blurRadius: 16,
+                    offset: const Offset(0, 4),
+                  )
+                ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(20),
+          child: Column(children: children),
+        ),
       ),
-      title: Text(name, style: TextStyle(color: isDarkMode ? Colors.white : AppTheme.textLight)),
-      trailing: Text(code, style: const TextStyle(color: AppTheme.textMutedDark, fontWeight: FontWeight.bold)),
-      tileColor: isSelected ? AppTheme.primaryAccent.withOpacity(0.05) : Colors.transparent,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
     );
   }
+}
 
-  void _showLogoutDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: ref.read(themeModeProvider) ? AppTheme.surfaceDark : Colors.white,
-        surfaceTintColor: Colors.transparent,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        title: Text('Log Out', 
-            style: TextStyle(
-                color: ref.read(themeModeProvider) ? Colors.white : AppTheme.textLight, 
-                fontWeight: FontWeight.bold)),
-        content: const Text('Are you sure you want to log out?', style: TextStyle(color: AppTheme.textMutedDark)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel', style: TextStyle(color: AppTheme.textMutedDark)),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(context); // Close dialog
-              await Supabase.instance.client.auth.signOut();
-              if (context.mounted) {
-                context.go('/login');
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.error,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+class _SettingRow extends StatelessWidget {
+  final IconData icon;
+  final Color iconColor;
+  final String title;
+  final String? subtitle;
+  final Widget? trailing;
+  final bool isDarkMode;
+  final VoidCallback onTap;
+
+  const _SettingRow({
+    required this.icon,
+    required this.iconColor,
+    required this.title,
+    this.subtitle,
+    this.trailing,
+    required this.isDarkMode,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: iconColor.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(icon, color: iconColor, size: 20),
             ),
-            child: const Text('Log Out'),
-          ),
-        ],
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title,
+                      style: TextStyle(
+                          color: isDarkMode
+                              ? Colors.white
+                              : AppTheme.headingLight,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600)),
+                  if (subtitle != null)
+                    Text(subtitle!,
+                        style: const TextStyle(
+                            color: AppTheme.textMutedDark,
+                            fontSize: 12)),
+                ],
+              ),
+            ),
+            if (trailing != null) ...[
+              const SizedBox(width: 8),
+              trailing!,
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _Divider extends StatelessWidget {
+  final bool isDarkMode;
+  const _Divider({required this.isDarkMode});
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: Divider(
+          height: 1,
+          color: isDarkMode
+              ? AppTheme.surfaceDarkLighter
+              : AppTheme.borderLight,
+        ),
+      );
+}
+
+class _CurrencyOption extends StatelessWidget {
+  final String code;
+  final String name;
+  final String symbol;
+  final bool isSelected;
+  final bool isDarkMode;
+  final VoidCallback onTap;
+
+  const _CurrencyOption({
+    required this.code,
+    required this.name,
+    required this.symbol,
+    required this.isSelected,
+    required this.isDarkMode,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? (isDarkMode ? AppTheme.primaryAccent : AppTheme.primaryLight).withOpacity(0.1)
+              : (isDarkMode
+                  ? AppTheme.surfaceDark
+                  : Colors.grey.shade50),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+              color: isSelected
+                  ? (isDarkMode ? AppTheme.primaryAccent : AppTheme.primaryLight).withOpacity(0.5)
+                  : (isDarkMode
+                      ? AppTheme.surfaceDarkLighter
+                      : Colors.grey.shade200)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: isSelected
+                    ? (isDarkMode ? AppTheme.primaryAccent : AppTheme.primaryLight)
+                    : AppTheme.textMutedDark.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Center(
+                child: Text(symbol,
+                    style: TextStyle(
+                        color: isSelected
+                            ? Colors.white
+                            : AppTheme.textMutedDark,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16)),
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(name,
+                      style: TextStyle(
+                          color: isDarkMode
+                              ? Colors.white
+                              : AppTheme.headingLight,
+                          fontWeight: FontWeight.w600)),
+                  Text(code,
+                      style: const TextStyle(
+                          color: AppTheme.textMutedDark,
+                          fontSize: 12)),
+                ],
+              ),
+            ),
+            if (isSelected)
+              Icon(Icons.check_circle_rounded,
+                  color: isDarkMode ? AppTheme.primaryAccent : AppTheme.primaryLight, size: 22),
+          ],
+        ),
       ),
     );
   }

@@ -7,22 +7,87 @@ import '../../subscriptions/data/subscription_repository.dart';
 import '../../subscriptions/models/subscription_model.dart';
 import '../../../core/theme.dart';
 import '../../../core/currency_provider.dart';
+import '../../../main.dart';
 
-class DashboardScreen extends ConsumerWidget {
+class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<DashboardScreen> createState() => _DashboardScreenState();
+}
+
+class _DashboardScreenState extends ConsumerState<DashboardScreen> {
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        final notifier = ref.read(currencyProvider.notifier);
+        if (!notifier.hasChosenCurrency) {
+          _showCurrencyDialog();
+        }
+      }
+    });
+  }
+
+  void _showCurrencyDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        backgroundColor: ref.read(themeModeProvider) ? AppTheme.surfaceDark : Colors.white,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: Text('Welcome! Let\'s setup', 
+            style: TextStyle(
+                color: ref.read(themeModeProvider) ? Colors.white : AppTheme.headingLight, 
+                fontWeight: FontWeight.bold)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Please choose your default currency. You can always change this later in Settings.', 
+                style: TextStyle(color: AppTheme.textMutedDark)),
+            const SizedBox(height: 16),
+            _buildCurrencyOption('USD', 'US Dollar (\$)'),
+            const SizedBox(height: 8),
+            _buildCurrencyOption('PHP', 'Philippine Peso (₱)'),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCurrencyOption(String code, String name) {
+    final isDarkMode = ref.read(themeModeProvider);
+    return ListTile(
+      onTap: () {
+        ref.read(currencyProvider.notifier).setCurrency(code);
+        Navigator.pop(context);
+      },
+      leading: const Icon(Icons.payments_outlined, color: AppTheme.secondaryAccent),
+      title: Text(name, style: TextStyle(color: isDarkMode ? Colors.white : AppTheme.headingLight)),
+      trailing: Text(code, style: const TextStyle(color: AppTheme.textMutedDark, fontWeight: FontWeight.bold)),
+      tileColor: (isDarkMode ? AppTheme.primaryAccent : AppTheme.primaryLight).withOpacity(0.05),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final subscriptionsAsync = ref.watch(subscriptionsProvider);
     final user = Supabase.instance.client.auth.currentUser;
     final greeting = _getGreeting();
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final currencySymbol = ref.watch(currencyProvider.notifier).symbol;
+    // Watch state directly so widget rebuilds when currency changes
+    ref.watch(currencyProvider);
+    final currencySymbol = ref.read(currencyProvider.notifier).symbol;
 
     return RefreshIndicator(
       onRefresh: () async => ref.read(subscriptionsProvider.notifier).refresh(),
-      color: AppTheme.primaryAccent,
+      color: isDark ? AppTheme.primaryAccent : AppTheme.primaryLight,
       backgroundColor: isDark ? AppTheme.surfaceDark : Colors.white,
       displacement: 60,
       child: CustomScrollView(
@@ -38,7 +103,7 @@ class DashboardScreen extends ConsumerWidget {
                   end: Alignment.bottomRight,
                   colors: isDark
                       ? [const Color(0xFF1A0E2E), AppTheme.bgDark]
-                      : [const Color(0xFFE2E8F0), Colors.white],
+                      : [const Color(0xFFE0E7FF), Colors.white], // Soft indigo to white
                 ),
               ),
               child: Column(
@@ -60,7 +125,7 @@ class DashboardScreen extends ConsumerWidget {
                                   user?.email?.split('@').first ??
                                   'User',
                               style: TextStyle(
-                                color: isDark ? Colors.white : AppTheme.textLight,
+                                color: isDark ? Colors.white : AppTheme.headingLight,
                                 fontSize: 22,
                                 fontWeight: FontWeight.bold,
                               ),
@@ -81,7 +146,7 @@ class DashboardScreen extends ConsumerWidget {
                         ),
                         child: IconButton(
                           icon: Icon(Icons.settings_outlined,
-                              color: isDark ? AppTheme.textMutedDark : AppTheme.textLight, size: 20),
+                              color: isDark ? AppTheme.textMutedDark : AppTheme.headingLight, size: 20),
                           onPressed: () => context.push('/settings'),
                         ),
                       ),
@@ -90,12 +155,12 @@ class DashboardScreen extends ConsumerWidget {
                   const SizedBox(height: 28),
                   // Stats section
                   subscriptionsAsync.when(
-                    data: (subs) => _buildHeaderStats(context, subs, currencySymbol),
-                    loading: () => const SizedBox(
+                    data: (subs) => _buildHeaderStats(context, subs, currencySymbol, ref),
+                    loading: () => SizedBox(
                         height: 120,
                         child: Center(
                             child: CircularProgressIndicator(
-                                color: AppTheme.primaryAccent,
+                                color: isDark ? AppTheme.primaryAccent : AppTheme.primaryLight,
                                 strokeWidth: 2))),
                     error: (_, __) => const SizedBox.shrink(),
                   ),
@@ -115,7 +180,7 @@ class DashboardScreen extends ConsumerWidget {
                       style: TextStyle(
                           fontSize: 18, 
                           fontWeight: FontWeight.bold,
-                          color: isDark ? Colors.white : AppTheme.textLight)),
+                          color: isDark ? Colors.white : AppTheme.headingLight)),
                   subscriptionsAsync.whenOrNull(
                         data: (subs) => subs.isNotEmpty
                             ? Text('${subs.length} active',
@@ -148,9 +213,9 @@ class DashboardScreen extends ConsumerWidget {
                 ),
               );
             },
-            loading: () => const SliverFillRemaining(
+            loading: () => SliverFillRemaining(
               child: Center(
-                  child: CircularProgressIndicator(color: AppTheme.primaryAccent)),
+                  child: CircularProgressIndicator(color: isDark ? AppTheme.primaryAccent : AppTheme.primaryLight)),
             ),
             error: (err, stack) => SliverFillRemaining(
               child: Center(child: Text('Error: $err')),
@@ -163,9 +228,10 @@ class DashboardScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildHeaderStats(BuildContext context, List<Subscription> subs, String symbol) {
+  Widget _buildHeaderStats(BuildContext context, List<Subscription> subs, String symbol, WidgetRef ref) {
     final monthly = _calculateMonthly(subs);
-    final yearly = monthly * 12;
+    final displayMonthly = ref.watch(currencyProvider.notifier).convertToDisplay(monthly);
+    final displayYearly = displayMonthly * 12;
     final now = DateTime.now();
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
@@ -194,7 +260,7 @@ class DashboardScreen extends ConsumerWidget {
             ),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
-                color: AppTheme.primaryAccent.withOpacity(isDark ? 0.3 : 0.15), width: 1.5),
+                color: (isDark ? AppTheme.primaryAccent : AppTheme.primaryLight).withOpacity(isDark ? 0.3 : 0.4), width: 1.5),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -204,9 +270,9 @@ class DashboardScreen extends ConsumerWidget {
                       TextStyle(color: AppTheme.textMutedDark, fontSize: 13)),
               const SizedBox(height: 6),
               Text(
-                NumberFormat.currency(symbol: symbol).format(monthly),
+                NumberFormat.currency(symbol: symbol).format(displayMonthly),
                 style: TextStyle(
-                  color: isDark ? Colors.white : AppTheme.textLight,
+                  color: isDark ? Colors.white : AppTheme.headingLight,
                   fontSize: 34,
                   fontWeight: FontWeight.bold,
                   letterSpacing: -0.5,
@@ -214,7 +280,7 @@ class DashboardScreen extends ConsumerWidget {
               ),
               const SizedBox(height: 4),
               Text(
-                '${NumberFormat.currency(symbol: symbol).format(yearly)} / year',
+                '${NumberFormat.currency(symbol: symbol).format(displayYearly)} / year',
                 style: const TextStyle(
                     color: AppTheme.textMutedDark, fontSize: 13),
               ),
@@ -257,6 +323,7 @@ class DashboardScreen extends ConsumerWidget {
   }
 
   Widget _buildEmptyState(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -268,15 +335,15 @@ class DashboardScreen extends ConsumerWidget {
               color: AppTheme.primaryAccent.withOpacity(0.1),
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.subscriptions_outlined,
-                size: 44, color: AppTheme.primaryAccent),
+            child: Icon(Icons.subscriptions_outlined,
+                size: 44, color: isDark ? AppTheme.primaryAccent : AppTheme.primaryLight),
           ),
           const SizedBox(height: 24),
           Text('No Subscriptions',
               style: TextStyle(
                   fontSize: 20, 
                   fontWeight: FontWeight.bold,
-                  color: Theme.of(context).brightness == Brightness.dark ? Colors.white : AppTheme.textLight)),
+                  color: isDark ? Colors.white : AppTheme.headingLight)),
           const SizedBox(height: 8),
           const Text(
             'Tap the Add button to track\nyour first subscription',
@@ -345,7 +412,7 @@ class _MiniCard extends StatelessWidget {
               style: TextStyle(
                   fontSize: 22, 
                   fontWeight: FontWeight.bold, 
-                  color: isDark ? Colors.white : AppTheme.textLight)),
+                  color: isDark ? Colors.white : AppTheme.headingLight)),
           const SizedBox(height: 2),
           Text(title,
               style: const TextStyle(
@@ -394,6 +461,7 @@ class _SubscriptionCard extends ConsumerWidget {
     final daysUntil = subscription.nextBillingDate.difference(now).inDays;
     final color = _categoryColors[subscription.category] ?? AppTheme.primaryAccent;
     final icon = _icons[subscription.category] ?? Icons.category_outlined;
+    final displayPrice = ref.watch(currencyProvider.notifier).convertToDisplay(subscription.price);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -470,7 +538,7 @@ class _SubscriptionCard extends ConsumerWidget {
                               style: TextStyle(
                                   fontWeight: FontWeight.bold,
                                   fontSize: 16,
-                                  color: isDark ? Colors.white : AppTheme.textLight)),
+                                  color: isDark ? Colors.white : AppTheme.headingLight)),
                           const SizedBox(height: 4),
                           Row(
                             children: [
@@ -513,11 +581,11 @@ class _SubscriptionCard extends ConsumerWidget {
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
                         Text(
-                          '$currencySymbol${subscription.price.toStringAsFixed(2)}',
+                          '$currencySymbol${displayPrice.toStringAsFixed(2)}',
                           style: TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: 17,
-                              color: isDark ? Colors.white : AppTheme.textLight),
+                              color: isDark ? Colors.white : AppTheme.headingLight),
                         ),
                         Text(
                           subscription.billingCycle.toLowerCase(),
@@ -570,7 +638,7 @@ class _SubscriptionCard extends ConsumerWidget {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         title: Text('Delete Subscription',
             style: TextStyle(
-                color: isDark ? Colors.white : AppTheme.textLight,
+                color: isDark ? Colors.white : AppTheme.headingLight,
                 fontWeight: FontWeight.bold)),
         content: Text(
             'Are you sure you want to delete "${subscription.name}"?',

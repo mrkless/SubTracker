@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/auth_provider.dart';
+import '../../../core/services/notification_service.dart';
 import '../models/subscription_model.dart';
 
 final subscriptionRepositoryProvider = Provider<SubscriptionRepository>((ref) {
@@ -31,6 +32,15 @@ class SubscriptionRepository {
       final subs = (data as List).map((json) => Subscription.fromJson(json)).toList();
 
       await _cacheSubscriptions(subs, currentUserId);
+      await NotificationService().scheduleAllSubscriptions(subs);
+
+      // Fire immediate overdue alert if any subs are past due
+      final now = DateTime.now();
+      final overdue = subs.where((s) => s.nextBillingDate.isBefore(now)).toList();
+      if (overdue.isNotEmpty) {
+        await NotificationService().sendOverdueAlert(overdue);
+      }
+
       return subs;
     } catch (e) {
       print('DEBUG: Remote fetch failed: $e');
@@ -59,6 +69,7 @@ class SubscriptionRepository {
     final cached = _getCachedSubscriptions(currentUserId);
     cached.add(newSub);
     await _cacheSubscriptions(cached, currentUserId);
+    await NotificationService().scheduleSubscriptionNotification(newSub);
     return newSub;
   }
 
@@ -82,6 +93,7 @@ class SubscriptionRepository {
     if (idx != -1) {
       cached[idx] = subscription;
       await _cacheSubscriptions(cached, currentUserId);
+      await NotificationService().scheduleSubscriptionNotification(subscription);
     }
   }
 
@@ -101,6 +113,7 @@ class SubscriptionRepository {
     final cached = _getCachedSubscriptions(currentUserId);
     cached.removeWhere((s) => s.id == id);
     await _cacheSubscriptions(cached, currentUserId);
+    await NotificationService().cancelNotification(id.hashCode);
   }
 
   Future<void> _cacheSubscriptions(List<Subscription> subs, String userId) async {

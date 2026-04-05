@@ -46,8 +46,10 @@ class _EditSubscriptionScreenState
   void initState() {
     super.initState();
     final s = widget.subscription;
+    // Ensure we run the read after the first frame or use the provider directly if we don't have access in initState without warning
+    // But ref.read is generally available in ConsumerState's initState:
     _nameCtrl = TextEditingController(text: s.name);
-    _priceCtrl = TextEditingController(text: s.price.toString());
+    _priceCtrl = TextEditingController(text: ref.read(currencyProvider.notifier).convertToDisplay(s.price).toStringAsFixed(2));
     _notesCtrl = TextEditingController(text: s.notes ?? '');
     _selectedCycle = s.billingCycle;
     _selectedCategory = s.category;
@@ -89,7 +91,7 @@ class _EditSubscriptionScreenState
     try {
       final updated = widget.subscription.copyWith(
         name: _nameCtrl.text.trim(),
-        price: double.parse(_priceCtrl.text.trim()),
+        price: ref.read(currencyProvider.notifier).convertToBase(double.parse(_priceCtrl.text.trim())),
         billingCycle: _selectedCycle,
         nextBillingDate: _nextBillingDate,
         category: _selectedCategory,
@@ -130,7 +132,7 @@ class _EditSubscriptionScreenState
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         title: Text('Delete Subscription',
             style: TextStyle(
-                color: isDark ? Colors.white : AppTheme.textLight,
+                color: isDark ? Colors.white : AppTheme.headingLight,
                 fontWeight: FontWeight.bold)),
         content: Text(
             'Are you sure you want to delete "${widget.subscription.name}"? This action cannot be undone.',
@@ -220,7 +222,7 @@ class _EditSubscriptionScreenState
               TextFormField(
                 controller: _nameCtrl,
                 style: TextStyle(
-                    color: isDark ? Colors.white : AppTheme.textLight),
+                    color: isDark ? Colors.white : AppTheme.headingLight),
                 decoration: const InputDecoration(
                   hintText: 'e.g. Netflix, Spotify...',
                   prefixIcon: Icon(Icons.label_outline,
@@ -237,7 +239,7 @@ class _EditSubscriptionScreenState
                 keyboardType:
                     const TextInputType.numberWithOptions(decimal: true),
                 style: TextStyle(
-                    color: isDark ? Colors.white : AppTheme.textLight),
+                    color: isDark ? Colors.white : AppTheme.headingLight),
                 decoration: InputDecoration(
                   hintText: '0.00',
                   prefixIcon: Padding(
@@ -353,7 +355,7 @@ class _EditSubscriptionScreenState
                                     ? Colors.white
                                     : (isDark
                                         ? AppTheme.textMutedDark
-                                        : AppTheme.textLight),
+                                        : AppTheme.headingLight),
                                 fontWeight: FontWeight.w600,
                                 fontSize: 13,
                               )),
@@ -391,7 +393,7 @@ class _EditSubscriptionScreenState
                         DateFormat('MMMM dd, yyyy').format(_nextBillingDate),
                         style: TextStyle(
                           color:
-                              isDark ? Colors.white : AppTheme.textLight,
+                              isDark ? Colors.white : AppTheme.headingLight,
                           fontSize: 16,
                         ),
                       ),
@@ -409,7 +411,7 @@ class _EditSubscriptionScreenState
                 controller: _notesCtrl,
                 maxLines: 3,
                 style: TextStyle(
-                    color: isDark ? Colors.white : AppTheme.textLight),
+                    color: isDark ? Colors.white : AppTheme.headingLight),
                 decoration: const InputDecoration(
                   hintText: 'Anything to remember...',
                   prefixIcon: Padding(

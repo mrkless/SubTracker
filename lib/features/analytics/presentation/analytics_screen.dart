@@ -32,11 +32,15 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
   Widget build(BuildContext context) {
     final subscriptionsAsync = ref.watch(subscriptionsProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final currencySymbol = ref.watch(currencyProvider.notifier).symbol;
+    // Watch state directly so widget rebuilds when currency changes
+    ref.watch(currencyProvider);
+    final currencyNotifier = ref.read(currencyProvider.notifier);
+    final currencySymbol = currencyNotifier.symbol;
 
     return SafeArea(
       child: subscriptionsAsync.when(
-        data: (subs) {
+        data: (rawSubs) {
+          final subs = rawSubs.map((s) => s.copyWith(price: currencyNotifier.convertToDisplay(s.price))).toList();
           if (subs.isEmpty) {
             return Center(
               child: Column(
@@ -57,7 +61,7 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
                       style: TextStyle(
                           fontSize: 20, 
                           fontWeight: FontWeight.bold,
-                          color: isDark ? Colors.white : AppTheme.textLight)),
+                          color: isDark ? Colors.white : AppTheme.headingLight)),
                   const SizedBox(height: 8),
                   const Text('Add subscriptions to see analytics',
                       style: TextStyle(color: AppTheme.textMutedDark)),
@@ -134,7 +138,7 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
                       style: TextStyle(
                           fontSize: 28, 
                           fontWeight: FontWeight.bold,
-                          color: isDark ? Colors.white : AppTheme.textLight)),
+                          color: isDark ? Colors.white : AppTheme.headingLight)),
                   const SizedBox(height: 4),
                   const Text('Data-driven spending insights',
                       style: TextStyle(
@@ -191,7 +195,7 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Text('TOTAL', style: TextStyle(color: AppTheme.textMutedDark, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
-                          Text('$currencySymbol${grandTotal.toStringAsFixed(0)}', style: TextStyle(color: isDark ? Colors.white : AppTheme.textLight, fontSize: 18, fontWeight: FontWeight.w900)),
+                          Text('$currencySymbol${grandTotal.toStringAsFixed(0)}', style: TextStyle(color: isDark ? Colors.white : AppTheme.headingLight, fontSize: 18, fontWeight: FontWeight.w900)),
                         ],
                       ),
                     ],
@@ -224,8 +228,8 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
           ),
         );
       },
-        loading: () => const Center(
-            child: CircularProgressIndicator(color: AppTheme.primaryAccent)),
+        loading: () => Center(
+            child: CircularProgressIndicator(color: isDark ? AppTheme.primaryAccent : AppTheme.primaryLight)),
         error: (err, __) => Center(child: Text('Error: $err')),
       ),
     );
@@ -246,7 +250,7 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
           children: [
             Icon(icon, color: color, size: 20),
             const SizedBox(height: 12),
-            Text(val, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: isDark ? Colors.white : AppTheme.textLight)),
+            Text(val, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: isDark ? Colors.white : AppTheme.headingLight)),
             Text(label, style: const TextStyle(color: AppTheme.textMutedDark, fontSize: 11, fontWeight: FontWeight.w600)),
           ],
         ),
@@ -280,7 +284,7 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text('Heaviest Bill', style: TextStyle(color: AppTheme.textMutedDark, fontSize: 12, fontWeight: FontWeight.bold)),
-                Text(mostExpensive.name, style: TextStyle(color: isDark ? Colors.white : AppTheme.textLight, fontSize: 16, fontWeight: FontWeight.bold)),
+                Text(mostExpensive.name, style: TextStyle(color: isDark ? Colors.white : AppTheme.headingLight, fontSize: 16, fontWeight: FontWeight.bold)),
               ],
             ),
           ),
@@ -373,7 +377,7 @@ class _CategoryTile extends StatelessWidget {
             child: Text(category,
                 style: TextStyle(
                     fontWeight: FontWeight.w600, 
-                    color: isDark ? Colors.white : AppTheme.textLight)),
+                    color: isDark ? Colors.white : AppTheme.headingLight)),
           ),
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
@@ -381,7 +385,7 @@ class _CategoryTile extends StatelessWidget {
               Text('$currencySymbol${amount.toStringAsFixed(2)}',
                   style: TextStyle(
                       fontWeight: FontWeight.bold, 
-                      color: isDark ? Colors.white : AppTheme.textLight)),
+                      color: isDark ? Colors.white : AppTheme.headingLight)),
               Text('${percent.toStringAsFixed(1)}%',
                   style: const TextStyle(
                       color: AppTheme.textMutedDark, fontSize: 12)),

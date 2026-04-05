@@ -14,11 +14,14 @@ class CalendarScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final subscriptionsAsync = ref.watch(subscriptionsProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final currencySymbol = ref.watch(currencyProvider.notifier).symbol;
+    // Watch state directly so widget rebuilds when currency changes
+    ref.watch(currencyProvider);
+    final currencySymbol = ref.read(currencyProvider.notifier).symbol;
 
     return SafeArea(
       child: subscriptionsAsync.when(
-        data: (subs) {
+        data: (rawSubs) {
+          final subs = rawSubs.map((s) => s.copyWith(price: ref.watch(currencyProvider.notifier).convertToDisplay(s.price))).toList();
           if (subs.isEmpty) {
             return Center(
               child: Column(
@@ -39,7 +42,7 @@ class CalendarScreen extends ConsumerWidget {
                       style: TextStyle(
                           fontSize: 20, 
                           fontWeight: FontWeight.bold,
-                          color: isDark ? Colors.white : AppTheme.textLight)),
+                          color: isDark ? Colors.white : AppTheme.headingLight)),
                   const SizedBox(height: 8),
                   const Text('Add subscriptions to see your schedule',
                       textAlign: TextAlign.center,
@@ -75,7 +78,7 @@ class CalendarScreen extends ConsumerWidget {
                             style: TextStyle(
                                 fontSize: 28,
                                 fontWeight: FontWeight.bold,
-                                color: isDark ? Colors.white : AppTheme.textLight)),
+                                color: isDark ? Colors.white : AppTheme.headingLight)),
                         const SizedBox(height: 4),
                         const Text('Sorted by billing date',
                             style: TextStyle(color: AppTheme.textMutedDark, fontSize: 14)),
@@ -134,8 +137,8 @@ class CalendarScreen extends ConsumerWidget {
             ),
           );
         },
-        loading: () => const Center(
-            child: CircularProgressIndicator(color: AppTheme.primaryAccent)),
+        loading: () => Center(
+            child: CircularProgressIndicator(color: isDark ? AppTheme.primaryAccent : AppTheme.primaryLight)),
         error: (err, __) => Center(child: Text('Error: $err')),
       ),
     );
@@ -182,7 +185,7 @@ class CalendarScreen extends ConsumerWidget {
                     style: TextStyle(
                         fontSize: 20, 
                         fontWeight: FontWeight.bold, 
-                        color: isDark ? Colors.white : AppTheme.textLight)),
+                        color: isDark ? Colors.white : AppTheme.headingLight)),
               ],
             ),
           ),
@@ -206,7 +209,7 @@ class CalendarScreen extends ConsumerWidget {
                     style: TextStyle(
                         fontSize: 20, 
                         fontWeight: FontWeight.bold, 
-                        color: isDark ? Colors.white : AppTheme.textLight)),
+                        color: isDark ? Colors.white : AppTheme.headingLight)),
               ],
             ),
           ),
@@ -275,7 +278,7 @@ class _CalendarTile extends StatelessWidget {
                 Text(subscription.name,
                     style: TextStyle(
                         fontWeight: FontWeight.bold, 
-                        color: isDark ? Colors.white : AppTheme.textLight)),
+                        color: isDark ? Colors.white : AppTheme.headingLight)),
                 Text(
                   isOverdue ? 'Overdue' : 'due in $daysUntil days',
                   style: TextStyle(
@@ -290,7 +293,7 @@ class _CalendarTile extends StatelessWidget {
             '$currencySymbol${subscription.price.toStringAsFixed(2)}',
             style: TextStyle(
                 fontWeight: FontWeight.bold, 
-                color: isDark ? Colors.white : AppTheme.textLight),
+                color: isDark ? Colors.white : AppTheme.headingLight),
           ),
         ],
       ),

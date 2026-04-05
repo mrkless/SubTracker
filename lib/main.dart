@@ -7,6 +7,8 @@ import 'core/theme.dart';
 import 'core/router.dart';
 import 'core/constants.dart';
 import 'core/auth_provider.dart';
+import 'core/services/notification_service.dart';
+import 'core/services/background_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -26,6 +28,14 @@ void main() async {
     url: AppConstants.supabaseUrl,
     anonKey: AppConstants.supabaseAnonKey,
   );
+
+  // Initialize Notifications
+  final notificationService = NotificationService();
+  await notificationService.initialize();
+  await notificationService.requestPermissions();
+
+  // Register background tasks (keep notifications alive when app is closed)
+  await registerBackgroundTasks();
 
   // Completely hide system navigation bar — full immersive screen
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);

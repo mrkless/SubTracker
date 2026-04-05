@@ -11,15 +11,21 @@ class AppTheme {
   static const Color surfaceDark = Color(0xFF151D2A); 
   static const Color surfaceDarkLighter = Color(0xFF1F2937); 
   
-  // High Contrast Light Palette
-  static const Color bgLight = Color(0xFFF8FAFC);
-  static const Color surfaceLight = Colors.white;
-  static const Color borderLight = Color(0xFFE2E8F0);
+  // Premium Soft Light Palette
+  static const Color bgLight = Color(0xFFF1F5F9); // Softer blue-gray
+  static const Color surfaceLight = Colors.white; 
+  static const Color borderLight = Color(0xFFE2E8F0); // Subtle borders
+  
+  // Refined Color Accents for Light Mode
+  static const Color primaryLight = Color(0xFF6366F1); // Indigo (softer than purple)
+  static const Color skyBlue = Color(0xFF0EA5E9); 
   
   // Text
-  static const Color textLight = Color(0xFF0F172A); // Darker for readability
+  static const Color headingLight = Color(0xFF1E293B); 
+  static const Color bodyLight = Color(0xFF475569); 
+  static const Color textLight = Color(0xFF0F172A); 
   static const Color textDark = Color(0xFFF9FAFB);
-  static const Color textMutedLight = Color(0xFF64748B); // Better contrast for light mode
+  static const Color textMutedLight = Color(0xFF64748B); 
   static const Color textMutedDark = Color(0xFF9CA3AF);
 
   // Status
@@ -33,22 +39,22 @@ class AppTheme {
       brightness: Brightness.light,
       scaffoldBackgroundColor: bgLight,
       colorScheme: const ColorScheme.light(
-        primary: primaryAccent,
-        secondary: Color(0xFF0D9488), // More teal-ish for light mode
+        primary: primaryLight,
+        secondary: skyBlue,
         surface: surfaceLight,
         onSurface: textLight,
         error: error,
       ),
       textTheme: GoogleFonts.outfitTextTheme(ThemeData.light().textTheme).apply(
-        bodyColor: textLight,
-        displayColor: textLight,
+        bodyColor: bodyLight,
+        displayColor: headingLight,
       ),
       appBarTheme: const AppBarTheme(
-        backgroundColor: surfaceLight,
+        backgroundColor: Colors.transparent, // More airy
         elevation: 0,
         centerTitle: true,
-        iconTheme: IconThemeData(color: textLight),
-        titleTextStyle: TextStyle(color: textLight, fontSize: 20, fontWeight: FontWeight.bold),
+        iconTheme: IconThemeData(color: headingLight),
+        titleTextStyle: TextStyle(color: headingLight, fontSize: 20, fontWeight: FontWeight.bold),
       ),
       inputDecorationTheme: _inputDecoration(isDark: false),
       elevatedButtonTheme: _elevatedButtonTheme(isDark: false),
@@ -123,10 +129,10 @@ class AppTheme {
   static ElevatedButtonThemeData _elevatedButtonTheme({required bool isDark}) {
     return ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
-        backgroundColor: primaryAccent,
+        backgroundColor: isDark ? primaryAccent : primaryLight,
         foregroundColor: Colors.white,
-        elevation: isDark ? 8 : 2,
-        shadowColor: primaryAccent.withOpacity(0.4),
+        elevation: isDark ? 8 : 4,
+        shadowColor: (isDark ? primaryAccent : primaryLight).withOpacity(0.4),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 28),
         textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),

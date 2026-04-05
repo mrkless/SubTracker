@@ -21,6 +21,13 @@ class CurrencyNotifier extends Notifier<String> {
     box.put('currency_$uid', code);
   }
 
+  bool get hasChosenCurrency {
+    final uid = _userId;
+    if (uid == null) return false;
+    final box = Hive.box('settings');
+    return box.containsKey('currency_$uid');
+  }
+
   String get symbol {
     switch (state) {
       case 'PHP':
@@ -29,6 +36,16 @@ class CurrencyNotifier extends Notifier<String> {
       default:
         return '\$';
     }
+  }
+
+  double convertToDisplay(double usdPrice) {
+    if (state == 'PHP') return usdPrice * 56.0;
+    return usdPrice;
+  }
+
+  double convertToBase(double displayPrice) {
+    if (state == 'PHP') return displayPrice / 56.0;
+    return displayPrice;
   }
 }
 
