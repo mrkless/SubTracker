@@ -1,8 +1,8 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
-import 'dart:io';
 
 import '../../features/subscriptions/models/subscription_model.dart';
 import '../theme.dart';
@@ -77,11 +77,13 @@ class NotificationService {
   // INITIALIZE
   // ─────────────────────────────────────────────────────────
   Future<void> initialize() async {
-    if (_isInitialized) return;
+    if (_isInitialized || kIsWeb) return;
 
     tz.initializeTimeZones();
-    final timeZoneInfo = await FlutterTimezone.getLocalTimezone();
-    tz.setLocalLocation(tz.getLocation(timeZoneInfo.identifier));
+    try {
+      final timeZoneInfo = await FlutterTimezone.getLocalTimezone();
+      tz.setLocalLocation(tz.getLocation(timeZoneInfo.identifier));
+    } catch (_) {}
 
     const androidSettings =
         AndroidInitializationSettings('@mipmap/ic_launcher');
@@ -104,12 +106,16 @@ class NotificationService {
   // REQUEST PERMISSIONS
   // ─────────────────────────────────────────────────────────
   Future<void> requestPermissions() async {
-    if (Platform.isIOS) {
+    if (kIsWeb) return;
+    
+    final platform = defaultTargetPlatform;
+
+    if (platform == TargetPlatform.iOS) {
       await _plugin
           .resolvePlatformSpecificImplementation<
               IOSFlutterLocalNotificationsPlugin>()
           ?.requestPermissions(alert: true, badge: true, sound: true);
-    } else if (Platform.isAndroid) {
+    } else if (platform == TargetPlatform.android) {
       final android =
           _plugin.resolvePlatformSpecificImplementation<
               AndroidFlutterLocalNotificationsPlugin>();
@@ -122,12 +128,14 @@ class NotificationService {
   // CANCEL helpers
   // ─────────────────────────────────────────────────────────
   Future<void> cancelAllForSubscription(String subId) async {
+    if (kIsWeb) return;
     for (int offset = 0; offset <= 4; offset++) {
       await _plugin.cancel(id: _id(subId, offset));
     }
   }
 
   Future<void> cancelNotification(int id) async {
+    if (kIsWeb) return;
     await _plugin.cancel(id: id);
   }
 
@@ -136,6 +144,7 @@ class NotificationService {
   // ─────────────────────────────────────────────────────────
   Future<void> scheduleSubscriptionNotification(
       Subscription subscription) async {
+    if (kIsWeb) return;
     await cancelAllForSubscription(subscription.id);
 
     final now = DateTime.now();
@@ -220,6 +229,7 @@ class NotificationService {
   // ─────────────────────────────────────────────────────────
   Future<void> scheduleAllSubscriptions(
       List<Subscription> subscriptions) async {
+    if (kIsWeb) return;
     await _plugin.cancelAll();
 
     for (final sub in subscriptions) {
@@ -237,6 +247,7 @@ class NotificationService {
   // DAILY TIP — every day at 10:00 AM, rotates content
   // ─────────────────────────────────────────────────────────
   Future<void> scheduleDailyTip() async {
+    if (kIsWeb) return;
     await _plugin.cancel(id: 999999);
 
     final now = DateTime.now();
@@ -274,6 +285,7 @@ class NotificationService {
   // ─────────────────────────────────────────────────────────
   Future<void> _scheduleWeeklyDigest(
       List<Subscription> subscriptions) async {
+    if (kIsWeb) return;
     if (subscriptions.isEmpty) return;
 
     final double monthlyTotal = subscriptions.fold(0.0, (sum, s) {
@@ -327,6 +339,7 @@ class NotificationService {
   // and overdue subs are detected)
   // ─────────────────────────────────────────────────────────
   Future<void> sendOverdueAlert(List<Subscription> overdueSubs) async {
+    if (kIsWeb) return;
     if (overdueSubs.isEmpty) return;
 
     final names = overdueSubs.take(3).map((s) => s.name).join(', ');

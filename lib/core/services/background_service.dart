@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:workmanager/workmanager.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -141,6 +142,8 @@ void callbackDispatcher() {
 /// Registers both periodic background tasks.
 /// Call once from main() after NotificationService.initialize().
 Future<void> registerBackgroundTasks() async {
+  if (kIsWeb) return;
+
   await Workmanager().initialize(
     callbackDispatcher,
     isInDebugMode: false,
