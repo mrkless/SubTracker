@@ -3,9 +3,12 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
+import 'package:hive_flutter/hive_flutter.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../features/subscriptions/models/subscription_model.dart';
 import '../theme.dart';
+import 'insights_engine.dart';
 
 // ─────────────────────────────────────────────────────────────
 // Notification Channel IDs
@@ -72,6 +75,31 @@ class NotificationService {
       FlutterLocalNotificationsPlugin();
 
   bool _isInitialized = false;
+
+  // Helpers to get currency formatting
+  String get _currencySymbol {
+    try {
+      final uid = Supabase.instance.client.auth.currentUser?.id;
+      if (uid == null) return '\$';
+      final box = Hive.box('settings');
+      final code = box.get('currency_$uid', defaultValue: 'USD');
+      return code == 'PHP' ? '₱' : '\$';
+    } catch (_) {
+      return '\$';
+    }
+  }
+
+  double _getDisplayPrice(double usdPrice) {
+    try {
+      final uid = Supabase.instance.client.auth.currentUser?.id;
+      if (uid == null) return usdPrice;
+      final box = Hive.box('settings');
+      final code = box.get('currency_$uid', defaultValue: 'USD');
+      return code == 'PHP' ? usdPrice * 56.0 : usdPrice;
+    } catch (_) {
+      return usdPrice;
+    }
+  }
 
   // ─────────────────────────────────────────────────────────
   // INITIALIZE
@@ -150,6 +178,9 @@ class NotificationService {
     final now = DateTime.now();
     final due = subscription.nextBillingDate;
     final daysUntil = due.difference(now).inDays;
+    
+    final sym = _currencySymbol;
+    final displayPrice = _getDisplayPrice(subscription.price).toStringAsFixed(2);
 
     // ── 7-day reminder ──────────────────────────────────────
     await _trySchedule(
@@ -172,7 +203,7 @@ class NotificationService {
       hour: 9,
       title: '⏰ 3 Days Until Renewal',
       body:
-          '${subscription.name} renews in 3 days for \$${subscription.price.toStringAsFixed(2)}.',
+          '${subscription.name} renews in 3 days for $sym$displayPrice.',
       channelId: _channelUpcoming,
       channelName: 'Upcoming Renewals',
       importance: Importance.high,
@@ -186,7 +217,7 @@ class NotificationService {
       hour: 9,
       title: '🔔 Renewing Tomorrow!',
       body:
-          '${subscription.name} renews TOMORROW for \$${subscription.price.toStringAsFixed(2)}. Check your balance.',
+          '${subscription.name} renews TOMORROW for $sym$displayPrice. Check your balance.',
       channelId: _channelUpcoming,
       channelName: 'Upcoming Renewals',
       importance: Importance.high,
@@ -200,7 +231,7 @@ class NotificationService {
       hour: 8,
       title: '💳 Renewing Today: ${subscription.name}',
       body:
-          'Your ${subscription.name} subscription charges \$${subscription.price.toStringAsFixed(2)} today.',
+          'Your ${subscription.name} subscription charges $sym$displayPrice today.',
       channelId: _channelUpcoming,
       channelName: 'Upcoming Renewals',
       importance: Importance.max,
@@ -238,6 +269,9 @@ class NotificationService {
 
     // ── Weekly spending digest (every Monday at 9 AM) ────────
     await _scheduleWeeklyDigest(subscriptions);
+
+    // ── Mid-week Smart Insight (every Thursday at 4 PM) ───────
+    await _scheduleMidWeekInsight(subscriptions);
 
     // ── Daily tip/insight/trivia (every day at 10 AM) ─────────
     await scheduleDailyTip();
@@ -288,6 +322,7 @@ class NotificationService {
     if (kIsWeb) return;
     if (subscriptions.isEmpty) return;
 
+    final sym = _currencySymbol;
     final double monthlyTotal = subscriptions.fold(0.0, (sum, s) {
       if (s.billingCycle.toLowerCase() == 'monthly') return sum + s.price;
       if (s.billingCycle.toLowerCase() == 'yearly') return sum + s.price / 12;
@@ -320,13 +355,57 @@ class NotificationService {
         id: 777777,
         title: '📊 Weekly Spending Digest',
         body:
-            'You spend ~\$${monthlyTotal.toStringAsFixed(2)}/month on ${subscriptions.length} subscriptions.$overdueNote',
+            'You spend ~$sym${_getDisplayPrice(monthlyTotal).toStringAsFixed(2)}/month on ${subscriptions.length} subscriptions.$overdueNote',
         scheduledDate: scheduled,
         notificationDetails: _buildDetails(
           channelId: _channelInsights,
           channelName: 'Spending Insights',
           importance: Importance.defaultImportance,
           priority: Priority.defaultPriority,
+        ),
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        matchDateTimeComponents: DateTimeComponents.dayOfWeekAndTime,
+      );
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────
+  // MID-WEEK SMART INSIGHT — every Thursday 4 PM
+  // ─────────────────────────────────────────────────────────
+  Future<void> _scheduleMidWeekInsight(List<Subscription> subscriptions) async {
+    if (kIsWeb) return;
+    if (subscriptions.isEmpty) return;
+
+    final insights = InsightsEngine.generateDynamicInsights(subscriptions, _currencySymbol);
+    if (insights.isEmpty) return;
+    
+    // Pick the most critical insight (first one)
+    final topInsight = insights.first;
+
+    await _plugin.cancel(id: 666666);
+
+    final now = DateTime.now();
+    // Find next Thursday
+    int daysToThursday = (DateTime.thursday - now.weekday + 7) % 7;
+    if (daysToThursday == 0 && now.hour >= 16) daysToThursday = 7; 
+    
+    final nextThursday = DateTime(
+        now.year, now.month, now.day + daysToThursday, 16, 0);
+
+    if (nextThursday.isAfter(now)) {
+      final tz.TZDateTime scheduled =
+          tz.TZDateTime.from(nextThursday, tz.local);
+
+      await _plugin.zonedSchedule(
+        id: 666666,
+        title: '💡 ${topInsight.title}',
+        body: topInsight.message,
+        scheduledDate: scheduled,
+        notificationDetails: _buildDetails(
+          channelId: _channelInsights,
+          channelName: 'Spending Insights',
+          importance: Importance.high,
+          priority: Priority.high,
         ),
         androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
         matchDateTimeComponents: DateTimeComponents.dayOfWeekAndTime,
@@ -392,7 +471,6 @@ class NotificationService {
           _buildDetails(channelId: channelId, channelName: channelName,
               importance: importance, priority: priority),
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-      matchDateTimeComponents: DateTimeComponents.time,
     );
   }
 
