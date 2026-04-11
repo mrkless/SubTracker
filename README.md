@@ -32,3 +32,7 @@ To run this project locally:
 2.  Run `flutter pub get` to install dependencies.
 3.  Set up your Supabase project and provide the URL and Anon Key in your environment variables.
 4.  Run `flutter run` to start the app.
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](../LICENSE) file for details.
